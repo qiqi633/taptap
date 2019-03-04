@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    toggle_sort_states(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+    var multiplier = reversed ? -1 : 1;
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+        return multiplier * (key_a >= key_b ? 1 : -1);
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>login.html</h1>
+    <p>Report generated on 02-Mar-2019 at 17:26:34 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v1.20.0</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>JAVA_HOME</td>
+        <td>C:\Program Files\Java\jdk-10.0.2\</td></tr>
+      <tr>
+        <td>Packages</td>
+        <td>{&apos;py&apos;: &apos;1.7.0&apos;, &apos;pytest&apos;: &apos;4.3.0&apos;, &apos;pluggy&apos;: &apos;0.8.1&apos;}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.17134</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{&apos;ordering&apos;: &apos;0.6&apos;, &apos;rerunfailures&apos;: &apos;6.0&apos;, &apos;html&apos;: &apos;1.20.0&apos;, &apos;metadata&apos;: &apos;1.8.0&apos;}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>2.7.14</td></tr></table>
+    <h2>Summary</h2>
+    <p>3 tests ran in 329.77 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">2 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">1 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>, <input checked="true" class="filter" data-test-result="rerun" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="rerun">12 rerun</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03817580&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03C472D8&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03BFBAA8&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03C47378&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03BFBBC0&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03C8A9E0&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x038E2A58&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03BE56E8&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03C6C0A8&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03CA8E40&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::teardown_class</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03C56530&gt;<br/><br/>    def teardown_class(self):<br/>        if self.driver:<br/>&gt;           self.driver.quit()<br/><br/>Test_scripts\taptap.py:36: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:697: in quit<br/>    self.execute(Command.QUIT)<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...de (C:\\Users\\L\\AppData\\Local\\Programs\\Appium\\resources\\app\\node_modules\\method-override\\index.js:65:14)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::tap_test</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03D91BE8&gt;<br/><br/>    def tap_test(self):<br/>&gt;       self.tap.goto_main()<br/><br/>Test_scripts\taptap.py:39: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>Page\login.py:29: in goto_main<br/>    update = self.obj.find_element_x(Page.app_update)<br/>Base\Base.py:26: in find_element_x<br/>    return WebDriverWait(self.driver,timeout,poll).until(lambda x:x.find_element(*loc))<br/>c:\python27\lib\site-packages\selenium\webdriver\support\wait.py:71: in until<br/>    value = method(self._driver)<br/>Base\Base.py:26: in &lt;lambda&gt;<br/>    return WebDriverWait(self.driver,timeout,poll).until(lambda x:x.find_element(*loc))<br/>c:\python27\lib\site-packages\appium\webdriver\webdriver.py:221: in find_element<br/>    'value': value})['value']<br/>c:\python27\lib\site-packages\selenium\webdriver\remote\webdriver.py:320: in execute<br/>    self.error_handler.check_response(response)<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;appium.webdriver.errorhandler.MobileErrorHandler object at 0x03BEA690&gt;<br/>response = {'status': 404, 'value': '{"value":{"error":"invalid session id","message":"A session is either terminated or not star...at endReadableNT (_stream_readable.js:1090:12)\n    at process._tickCallback (internal/process/next_tick.js:63:19)"}}'}<br/><br/>    def check_response(self, response):<br/>        try:<br/>            super(MobileErrorHandler, self).check_response(response)<br/>        except WebDriverException as wde:<br/>            if wde.msg == 'No such context found.':<br/>                raise NoSuchContextException(wde.msg, wde.screen, wde.stacktrace)<br/>            else:<br/>&gt;               raise wde<br/><span class="error">E               InvalidSessionIdException: Message: A session is either terminated or not started</span><br/><br/>c:\python27\lib\site-packages\appium\webdriver\errorhandler.py:29: InvalidSessionIdException<br/></div></td></tr></tbody>
+      <tbody class="rerun results-table-row">
+        <tr>
+          <td class="col-result">Rerun</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::tap_test</td>
+          <td class="col-duration">32.98</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;Test_scripts.taptap.Taptap instance at 0x03C64698&gt;<br/><br/>    def tap_test(self):<br/>        self.tap.goto_main()<br/>        # self.tap.main_page()<br/>&gt;       self.tap.goto_persion_page()<br/><br/>Test_scripts\taptap.py:41: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/>Page\login.py:47: in goto_persion_page<br/>    self.obj.click_element(Page.go_to_setting)<br/>Base\Base.py:29: in click_element<br/>    self.find_element_x(loc).click()<br/>Base\Base.py:26: in find_element_x<br/>    return WebDriverWait(self.driver,timeout,poll).until(lambda x:x.find_element(*loc))<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _<br/><br/>self = &lt;selenium.webdriver.support.wait.WebDriverWait (session="62493756-9cdd-4c6e-9e6a-6f6fb3f82622")&gt;<br/>method = &lt;function &lt;lambda&gt; at 0x03D34AF0&gt;, message = ''<br/><br/>    def until(self, method, message=''):<br/>        """Calls the method provided with the driver as an argument until the \<br/>        return value is not False."""<br/>        screen = None<br/>        stacktrace = None<br/>    <br/>        end_time = time.time() + self._timeout<br/>        while True:<br/>            try:<br/>                value = method(self._driver)<br/>                if value:<br/>                    return value<br/>            except self._ignored_exceptions as exc:<br/>                screen = getattr(exc, 'screen', None)<br/>                stacktrace = getattr(exc, 'stacktrace', None)<br/>            time.sleep(self._poll)<br/>            if time.time() &gt; end_time:<br/>                break<br/>&gt;       raise TimeoutException(message, screen, stacktrace)<br/><span class="error">E       TimeoutException: Message:</span><br/><br/>c:\python27\lib\site-packages\selenium\webdriver\support\wait.py:80: TimeoutException<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::setup_class</td>
+          <td class="col-duration">14.08</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">Test_scripts/taptap.py::Taptap::tap_test</td>
+          <td class="col-duration">226.61</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody></table></body></html>
